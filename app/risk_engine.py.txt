@@ -1,0 +1,125 @@
+from app.db import redis_client
+import json
+from datetime import datetime
+
+def get_user_profile(user_id: str) -> dict:
+    profile = redis_client.get(f"user_profile:{user_id}")
+    if profile:
+        return json.loads(profile)
+    return {
+        "avg_amount": 0,
+        "transaction_count": 0,
+        "known_devices": [],
+        "known_locations": [],
+        "failed_logins": 0,
+        "account_age_days": 0,
+        "recent_transactions": []
+    }
+
+def update_user_profile(user_id: str, transaction: dict, profile: dict):
+    # Update average amount
+    count = profile["transaction_count"]
+    avg = profile["avg_amount"]
+    new_avg = ((avg * count) + float(transaction["amount"])) / (count + 1)
+    profile["avg_amount"] = round(new_avg, 2)
+    profile["transaction_count"] = count + 1
+
+    # Track known devices and locations
+    if transaction["device_id"] and transaction["device_id"] not in profile["known_devices"]:
+        profile["known_devices"].append(transaction["device_id"])
+
+    if transaction["location"] and transaction["location"] not in profile["known_locations"]:
+        profile["known_locations"].append(transaction["location"])
+
+    # Keep last 10 transactions for velocity checks
+    profile["recent_transactions"].append({
+        "amount": float(transaction["amount"]),
+        "timestamp": transaction["timestamp"],
+        "device_id": transaction["device_id"],
+        "location": transaction["location"]
+    })
+    profile["recent_transactions"] = profile["recent_transactions"][-10:]
+
+    # Save back to Redis with 24 hour expiry
+    redis_client.setex(
+        f"user_profile:{user_id}",
+        86400,
+        json.dumps(profile)
+    )
+    return profile
+
+def calculate_velocity(profile: dict, minutes: int = 10) -> int:
+    now = datetime.utcnow()
+    recent = profile.get("recent_transactions", [])
+    count = 0
+    for txn in recent:
+        try:
+            txn_time = datetime.fromisoformat(txn["timestamp"])
+            diff = (now - txn_time).total_seconds() / 60
+            if diff <= minutes:
+                count += 1
+        except:
+            pass
+    return count
+
+def score_transaction(transaction: dict) -> tuple[int, list[str]]:
+    user_id = transaction["user_id"]
+    amount = float(transaction["amount"])
+    device_id = transaction.get("device_id")
+    location = transaction.get("location")
+    hour = datetime.utcnow().hour
+
+    # Get user profile from Redis
+    profile = get_user_profile(user_id)
+
+    signals = []
+    score = 0
+
+    # --- AMOUNT SIGNALS ---
+    if profile["avg_amount"] > 0 and amount > profile["avg_amount"] * 3:
+        signals.append("amount_spike")
+        score += 30
+
+    if amount > 100000:
+        signals.append("high_value_transfer")
+        score += 20
+
+    # --- VELOCITY SIGNALS ---
+    velocity = calculate_velocity(profile, minutes=10)
+    if velocity >= 4:
+        signals.append("rapid_succession")
+        score += 35
+
+    # --- BEHAVIORAL SIGNALS ---
+    if device_id and profile["known_devices"] and device_id not in profile["known_devices"]:
+        signals.append("new_device")
+        score += 25
+
+    if location and profile["known_locations"] and location not in profile["known_locations"]:
+        signals.append("new_location")
+        score += 20
+
+    # --- TIME SIGNALS ---
+    if hour < 6:
+        signals.append("unusual_hour")
+        score += 15
+
+    # --- NEW USER SIGNAL ---
+    if profile["transaction_count"] == 0:
+        signals.append("first_transaction")
+        score += 10
+
+    # Update profile after scoring
+    update_user_profile(user_id, transaction, profile)
+
+    return score, signals
+
+def get_risk_level(score: int) -> str:
+    if score >= 75:
+        return "CRITICAL"
+    elif score >= 50:
+        return "HIGH"
+    elif score >= 30:
+        return "MEDIUM"
+    else:
+        return "LOW"

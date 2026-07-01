@@ -1,40 +1,121 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Query
+from app.llm import generate_fraud_summary
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy import func
 from app.db import get_db
-from app.models import Transaction
-from app.schemas import TransactionCreate, TransactionResponse
-from typing import List
+from app.models import Transaction, UserLoginEvent
+from app.schemas import (
+    TransactionCreate, TransactionResponse, TransactionListResponse,
+    LoginEventCreate, LoginEventResponse
+)
+from app.risk_engine import score_transaction, get_risk_level, update_failed_logins, reset_failed_logins
+from typing import List, Optional
 import uuid
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
+login_router = APIRouter(prefix="/logins", tags=["logins"])
+
 
 @router.post("/", response_model=TransactionResponse)
-def create_transaction(transaction: TransactionCreate, db: Session = Depends(get_db)):
+async def create_transaction(
+    transaction: TransactionCreate,
+    db: AsyncSession = Depends(get_db)
+):
     db_transaction = Transaction(
         user_id=transaction.user_id,
         amount=transaction.amount,
         merchant=transaction.merchant,
+        merchant_category=transaction.merchant_category,
         location=transaction.location,
         device_id=transaction.device_id,
+        destination_account=transaction.destination_account,
         transaction_type=transaction.transaction_type,
     )
     db.add(db_transaction)
-    db.commit()
-    db.refresh(db_transaction)
+    await db.commit()
+    await db.refresh(db_transaction)
+
+    transaction_data = {
+        "user_id": transaction.user_id,
+        "amount": str(transaction.amount),
+        "device_id": transaction.device_id,
+        "location": transaction.location,
+        "destination_account": transaction.destination_account,
+        "merchant_category": transaction.merchant_category,
+        "transaction_type": transaction.transaction_type,
+        "timestamp": db_transaction.timestamp.isoformat()
+    }
+
+    score, signals = await score_transaction(transaction_data)
+    risk_level = get_risk_level(score)
+
+    db_transaction.risk_score = score
+    db_transaction.risk_level = risk_level
+    db_transaction.signals = ", ".join(signals) if signals else None
+    db_transaction.status = "flagged" if risk_level in ["HIGH", "CRITICAL"] else "cleared"
+    summary = await generate_fraud_summary(transaction_data, score, risk_level, signals)
+    db_transaction.summary = summary
+
+    await db.commit()
+    await db.refresh(db_transaction)
+
     return db_transaction
 
-@router.get("/", response_model=List[TransactionResponse])
-def get_transactions(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
-    transactions = db.query(Transaction).order_by(
-        Transaction.timestamp.desc()
-    ).offset(skip).limit(limit).all()
-    return transactions
+
+@router.get("/", response_model=TransactionListResponse)
+async def get_transactions(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    risk_level: Optional[str] = Query(None, description="Filter by risk level: LOW, MEDIUM, HIGH, CRITICAL"),
+    user_id: Optional[str] = Query(None, description="Filter by user ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    query = select(Transaction)
+    count_query = select(func.count()).select_from(Transaction)
+
+    if risk_level:
+        query = query.where(Transaction.risk_level == risk_level.upper())
+        count_query = count_query.where(Transaction.risk_level == risk_level.upper())
+
+    if user_id:
+        query = query.where(Transaction.user_id == user_id)
+        count_query = count_query.where(Transaction.user_id == user_id)
+
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
+
+    query = query.order_by(Transaction.timestamp.desc()).offset(skip).limit(limit)
+    result = await db.execute(query)
+    items = result.scalars().all()
+
+    return TransactionListResponse(total=total, skip=skip, limit=limit, items=items)
+
 
 @router.get("/{transaction_id}", response_model=TransactionResponse)
-def get_transaction(transaction_id: uuid.UUID, db: Session = Depends(get_db)):
-    transaction = db.query(Transaction).filter(
-        Transaction.id == transaction_id
-    ).first()
+async def get_transaction(transaction_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Transaction).where(Transaction.id == transaction_id))
+    transaction = result.scalar_one_or_none()
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
     return transaction
+
+
+@login_router.post("/", response_model=LoginEventResponse)
+async def record_login(login: LoginEventCreate, db: AsyncSession = Depends(get_db)):
+    db_login = UserLoginEvent(
+        user_id=login.user_id,
+        device_id=login.device_id,
+        location=login.location,
+        success=login.success
+    )
+    db.add(db_login)
+    await db.commit()
+    await db.refresh(db_login)
+
+    if login.success == "false":
+        await update_failed_logins(login.user_id)
+    else:
+        await reset_failed_logins(login.user_id)
+
+    return db_login
