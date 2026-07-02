@@ -29,3 +29,4 @@ langgraph==0.4.8
 langsmith==0.3.45
 openai==1.82.1
 qdrant-client==1.14.2
+langgraph-checkpoint==2.0.26

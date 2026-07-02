@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from app.llm import generate_fraud_summary
+from app.risk_engine import get_user_profile, update_user_profile, update_failed_logins, reset_failed_logins
+from app.agents.graph import run_fraud_analysis
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func
@@ -9,7 +10,6 @@ from app.schemas import (
     TransactionCreate, TransactionResponse, TransactionListResponse,
     LoginEventCreate, LoginEventResponse
 )
-from app.risk_engine import score_transaction, get_risk_level, update_failed_logins, reset_failed_logins
 from typing import List, Optional
 import uuid
 
@@ -47,15 +47,15 @@ async def create_transaction(
         "timestamp": db_transaction.timestamp.isoformat()
     }
 
-    score, signals = await score_transaction(transaction_data)
-    risk_level = get_risk_level(score)
+    profile = await get_user_profile(transaction.user_id)
+    result = await run_fraud_analysis(transaction_data, profile)
+    await update_user_profile(transaction.user_id, transaction_data, profile)
 
-    db_transaction.risk_score = score
-    db_transaction.risk_level = risk_level
-    db_transaction.signals = ", ".join(signals) if signals else None
-    db_transaction.status = "flagged" if risk_level in ["HIGH", "CRITICAL"] else "cleared"
-    summary = await generate_fraud_summary(transaction_data, score, risk_level, signals)
-    db_transaction.summary = summary
+    db_transaction.risk_score = result["total_score"]
+    db_transaction.risk_level = result["risk_level"]
+    db_transaction.signals = ", ".join(result["all_signals"]) if result["all_signals"] else None
+    db_transaction.summary = result["summary"]
+    db_transaction.status = "flagged" if result["risk_level"] in ["HIGH", "CRITICAL"] else "cleared"
 
     await db.commit()
     await db.refresh(db_transaction)
