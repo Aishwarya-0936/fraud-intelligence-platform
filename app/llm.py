@@ -20,14 +20,14 @@ else:
         "combined with activity from an unrecognized device and location. The use of a high-risk "
         "merchant category further elevates suspicion — immediate review is recommended."
     ])
-
 prompt = ChatPromptTemplate.from_messages([
     ("system",
      "You are a senior fraud analyst assistant. Given a transaction's details, risk score, "
-     "risk level, and detected fraud signals, write a concise 2-3 sentence investigation summary "
-     "that a human analyst can act on immediately. Be specific about which signals are most "
-     "concerning and why. Explain signals in plain English, not as raw variable names. "
-     "Always end with a recommended action."),
+     "risk level, detected fraud signals, and similar historical cases, write a concise "
+     "2-3 sentence investigation summary a human analyst can act on immediately. "
+     "Reference the historical cases briefly if they support your reasoning (e.g. "
+     "'this matches a pattern seen in past confirmed fraud cases'). Explain signals in "
+     "plain English, not raw variable names. Always end with a recommended action."),
     ("human",
      "Transaction Details:\n"
      "- Amount: {amount}\n"
@@ -38,20 +38,28 @@ prompt = ChatPromptTemplate.from_messages([
      "- Risk Score: {score} / 150\n"
      "- Risk Level: {risk_level}\n"
      "- Fraud Signals Detected: {signals}\n\n"
+     "Similar Historical Cases:\n{similar_cases}\n\n"
      "Write the fraud investigation summary.")
 ])
 
 chain = prompt | llm | StrOutputParser()
 
+
 async def generate_fraud_summary(
     transaction_data: dict,
     score: int,
     risk_level: str,
-    signals: list
+    signals: list,
+    similar_cases: list = None
 ) -> str:
-    # Only generate summary for HIGH and CRITICAL transactions
     if risk_level not in ["HIGH", "CRITICAL"]:
         return None
+
+    similar_cases = similar_cases or []
+    cases_text = "\n".join(
+        f"- ({c['outcome']}, similarity {c['similarity_score']}): {c['description']}"
+        for c in similar_cases
+    ) or "No closely similar cases found."
 
     try:
         result = await chain.ainvoke({
@@ -62,9 +70,9 @@ async def generate_fraud_summary(
             "transaction_type": transaction_data.get("transaction_type"),
             "score": score,
             "risk_level": risk_level,
-            "signals": ", ".join(signals) if signals else "none"
+            "signals": ", ".join(signals) if signals else "none",
+            "similar_cases": cases_text
         })
         return result
     except Exception as e:
-        # Never let LLM failure break the core fraud scoring
         return f"Summary generation failed: {str(e)}"

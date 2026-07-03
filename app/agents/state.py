@@ -14,7 +14,8 @@ class FraudAnalysisState(TypedDict):
 
     pattern_signals: List[str]
     pattern_score: int
-
+    similar_cases: list
+    
     # Final outputs — supervisor fills these
     all_signals: List[str]
     total_score: int
