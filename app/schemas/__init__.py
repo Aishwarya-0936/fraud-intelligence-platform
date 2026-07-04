@@ -30,9 +30,15 @@ class TransactionResponse(BaseModel):
     risk_level: str
     signals: Optional[str] = None
     summary: Optional[str] = None
+    review_decision: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
+
+class TransactionReviewRequest(BaseModel):
+    decision: str  # "approved" or "rejected"
+    reviewer_notes: Optional[str] = None
 
 class LoginEventCreate(BaseModel):
     user_id: str
@@ -50,6 +56,7 @@ class LoginEventResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
 class TransactionListResponse(BaseModel):
     total: int
     skip: int

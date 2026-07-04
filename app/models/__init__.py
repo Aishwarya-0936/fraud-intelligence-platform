@@ -21,6 +21,8 @@ class Transaction(Base):
     risk_level = Column(String, default="LOW")
     signals = Column(String, nullable=True)
     summary = Column(String, nullable=True)
+    review_decision = Column(String, nullable=True)  # "approved" or "rejected"
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
 
 class UserLoginEvent(Base):
     __tablename__ = "user_login_events"

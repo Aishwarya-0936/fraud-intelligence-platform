@@ -8,9 +8,11 @@ from app.db import get_db
 from app.models import Transaction, UserLoginEvent
 from app.schemas import (
     TransactionCreate, TransactionResponse, TransactionListResponse,
+    TransactionReviewRequest,
     LoginEventCreate, LoginEventResponse
 )
 from typing import List, Optional
+from datetime import datetime
 import uuid
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
@@ -35,10 +37,10 @@ async def create_transaction(
     db.add(db_transaction)
     await db.commit()
     await db.refresh(db_transaction)
-
     transaction_data = {
         "user_id": transaction.user_id,
         "amount": str(transaction.amount),
+        "merchant": transaction.merchant,
         "device_id": transaction.device_id,
         "location": transaction.location,
         "destination_account": transaction.destination_account,
@@ -55,7 +57,12 @@ async def create_transaction(
     db_transaction.risk_level = result["risk_level"]
     db_transaction.signals = ", ".join(result["all_signals"]) if result["all_signals"] else None
     db_transaction.summary = result["summary"]
-    db_transaction.status = "flagged" if result["risk_level"] in ["HIGH", "CRITICAL"] else "cleared"
+    if result["risk_level"] == "CRITICAL":
+        db_transaction.status = "pending_review"
+    elif result["risk_level"] == "HIGH":
+        db_transaction.status = "flagged"
+    else:
+        db_transaction.status = "cleared"
 
     await db.commit()
     await db.refresh(db_transaction)
@@ -98,6 +105,33 @@ async def get_transaction(transaction_id: uuid.UUID, db: AsyncSession = Depends(
     transaction = result.scalar_one_or_none()
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
+    return transaction
+
+
+@router.post("/{transaction_id}/review", response_model=TransactionResponse)
+async def review_transaction(
+    transaction_id: uuid.UUID,
+    review: TransactionReviewRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Transaction).where(Transaction.id == transaction_id))
+    transaction = result.scalar_one_or_none()
+
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    if transaction.status != "pending_review":
+        raise HTTPException(status_code=400, detail="This transaction is not awaiting review")
+
+    if review.decision not in ["approved", "rejected"]:
+        raise HTTPException(status_code=400, detail="Decision must be 'approved' or 'rejected'")
+
+    transaction.review_decision = review.decision
+    transaction.reviewed_at = datetime.utcnow()
+    transaction.status = "cleared" if review.decision == "approved" else "blocked"
+
+    await db.commit()
+    await db.refresh(transaction)
     return transaction
 
 
