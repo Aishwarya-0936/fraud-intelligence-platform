@@ -34,4 +34,9 @@ async def supervisor_node(state: FraudAnalysisState) -> FraudAnalysisState:
     state["total_score"] = total_score
     state["risk_level"] = risk_level
     state["summary"] = summary
-    return state
+    return {
+        "all_signals": all_signals,
+        "total_score": total_score,
+        "risk_level": risk_level,
+        "summary": summary,
+    }

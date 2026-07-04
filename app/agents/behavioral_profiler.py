@@ -75,4 +75,4 @@ async def behavioral_profiler_node(state: FraudAnalysisState) -> FraudAnalysisSt
 
     state["behavioral_signals"] = signals
     state["behavioral_score"] = score
-    return state
+    return {"behavioral_signals": signals, "behavioral_score": score}

@@ -32,4 +32,4 @@ async def transaction_analyst_node(state: FraudAnalysisState) -> FraudAnalysisSt
 
     state["amount_signals"] = signals
     state["amount_score"] = score
-    return state
+    return {"amount_signals": signals, "amount_score": score}

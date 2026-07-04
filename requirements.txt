@@ -27,6 +27,7 @@ anthropic==0.52.0
 langchain-openai==0.3.16
 langgraph==0.4.8
 langsmith==0.3.45
+networkx==3.4.2
 openai==1.82.1
 qdrant-client==1.14.2
 langgraph-checkpoint==2.0.26

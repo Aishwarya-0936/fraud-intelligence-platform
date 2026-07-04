@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from app.graphrag.pattern_graph import get_pattern_graph
 from app.routers import router, login_router
 from app.db import engine, Base
 from contextlib import asynccontextmanager
@@ -14,9 +15,9 @@ os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGSMITH_API_KEY", "")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create all DB tables on startup
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    get_pattern_graph()  # pre-builds and caches the graph in memory at startup
     yield
 
 app = FastAPI(

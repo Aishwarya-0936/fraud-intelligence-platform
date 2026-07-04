@@ -58,4 +58,4 @@ async def pattern_detector_node(state: FraudAnalysisState) -> FraudAnalysisState
 
     state["pattern_signals"] = signals
     state["pattern_score"] = score
-    return state
+    return {"pattern_signals": signals, "pattern_score": score}

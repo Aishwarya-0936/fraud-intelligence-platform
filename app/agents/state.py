@@ -1,23 +1,27 @@
-from typing import TypedDict, List, Optional
+from typing import TypedDict, List, Optional, Annotated
+
+
+def take_latest(old, new):
+    return new
+
 
 class FraudAnalysisState(TypedDict):
-    # Input transaction data
-    transaction: dict
-    user_profile: dict
+    transaction: Annotated[dict, take_latest]
+    user_profile: Annotated[dict, take_latest]
 
-    # Each agent writes their signals and score contribution here
-    amount_signals: List[str]
-    amount_score: int
+    amount_signals: Annotated[List[str], take_latest]
+    amount_score: Annotated[int, take_latest]
 
-    behavioral_signals: List[str]
-    behavioral_score: int
+    behavioral_signals: Annotated[List[str], take_latest]
+    behavioral_score: Annotated[int, take_latest]
 
-    pattern_signals: List[str]
-    pattern_score: int
-    similar_cases: list
-    
-    # Final outputs — supervisor fills these
-    all_signals: List[str]
-    total_score: int
-    risk_level: str
-    summary: Optional[str]
+    pattern_signals: Annotated[List[str], take_latest]
+    pattern_score: Annotated[int, take_latest]
+
+    similar_cases: Annotated[List[dict], take_latest]
+    related_patterns: Annotated[List[dict], take_latest]
+
+    all_signals: Annotated[List[str], take_latest]
+    total_score: Annotated[int, take_latest]
+    risk_level: Annotated[str, take_latest]
+    summary: Annotated[Optional[str], take_latest]
