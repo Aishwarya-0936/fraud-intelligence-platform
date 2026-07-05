@@ -33,3 +33,6 @@ qdrant-client==1.14.2
 langgraph-checkpoint==2.0.26
 fastembed==0.4.2
 mcp==1.9.0
+pytest==8.3.4
+pytest-asyncio==0.25.2
+httpx==0.28.1
