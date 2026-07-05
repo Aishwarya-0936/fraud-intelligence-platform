@@ -7,7 +7,7 @@ class Transaction(Base):
     __tablename__ = "transactions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(String, nullable=False)
+    user_id = Column(String, nullable=False, index=True)
     amount = Column(Numeric(12, 2), nullable=False)
     merchant = Column(String, nullable=True)
     merchant_category = Column(String, nullable=True)
@@ -15,13 +15,13 @@ class Transaction(Base):
     device_id = Column(String, nullable=True)
     destination_account = Column(String, nullable=True)
     transaction_type = Column(String, nullable=False)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now())
-    status = Column(String, default="pending")
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    status = Column(String, default="pending", index=True)
     risk_score = Column(Numeric(5, 2), default=0)
-    risk_level = Column(String, default="LOW")
+    risk_level = Column(String, default="LOW", index=True)
     signals = Column(String, nullable=True)
     summary = Column(String, nullable=True)
-    review_decision = Column(String, nullable=True)  # "approved" or "rejected"
+    review_decision = Column(String, nullable=True)
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     idempotency_key = Column(String, nullable=True, unique=True, index=True)
 
@@ -29,7 +29,7 @@ class UserLoginEvent(Base):
     __tablename__ = "user_login_events"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(String, nullable=False)
+    user_id = Column(String, nullable=False, index=True)
     device_id = Column(String, nullable=True)
     location = Column(String, nullable=True)
     success = Column(String, nullable=False)

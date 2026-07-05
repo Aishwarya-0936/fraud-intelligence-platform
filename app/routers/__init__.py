@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from app.risk_engine import get_user_profile, update_user_profile, update_failed_logins, reset_failed_logins
 from app.agents.graph import run_fraud_analysis
+from app.rate_limiter import is_rate_limited
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func
@@ -24,6 +25,9 @@ async def create_transaction(
     transaction: TransactionCreate,
     db: AsyncSession = Depends(get_db)
 ):
+    if await is_rate_limited(transaction.user_id):
+        raise HTTPException(status_code=429, detail="Too many requests. Please slow down.")
+
     # Idempotency check — if this exact request was already processed, return the original result
     # instead of scoring it again (protects against network retries, double-submits, etc.)
     if transaction.idempotency_key:
