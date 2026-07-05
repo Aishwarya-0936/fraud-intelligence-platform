@@ -6,14 +6,27 @@ from app.guardrails.pii_scrubber import scrub_transaction_for_llm
 from app.guardrails.injection_detector import sanitize_free_text_fields
 from app.guardrails.output_validator import validate_llm_output
 import os
+import asyncio
+import logging
+
+logger = logging.getLogger("fraud_llm")
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+LLM_TIMEOUT_SECONDS = 8
+
+FALLBACK_SUMMARY = (
+    "Automated summary generation was unavailable for this transaction. "
+    "This transaction was flagged based on the detected fraud signals listed above — "
+    "manual analyst review is recommended."
+)
 
 if ANTHROPIC_API_KEY and ANTHROPIC_API_KEY != "skip_for_now":
     llm = ChatAnthropic(
         model="claude-sonnet-4-6",
         temperature=0,
-        api_key=ANTHROPIC_API_KEY
+        api_key=ANTHROPIC_API_KEY,
+        timeout=LLM_TIMEOUT_SECONDS,   # hard timeout at the client level too
+        max_retries=1,                  # don't let LangChain's own retry loop add extra delay
     )
 else:
     llm = FakeListChatModel(responses=[
@@ -65,28 +78,31 @@ async def generate_fraud_summary(
         for c in similar_cases
     ) or "No closely similar cases found."
 
-    # Guardrail 1: scrub PII before it ever reaches the LLM
     safe_transaction = scrub_transaction_for_llm(transaction_data)
-
-    # Guardrail 2: check free-text fields for prompt injection attempts
     safe_transaction = sanitize_free_text_fields(safe_transaction)
 
     try:
-        result = await chain.ainvoke({
-            "amount": safe_transaction.get("amount"),
-            "merchant": safe_transaction.get("merchant") or "Unknown",
-            "merchant_category": safe_transaction.get("merchant_category") or "Unknown",
-            "location": safe_transaction.get("location") or "Unknown",
-            "transaction_type": safe_transaction.get("transaction_type"),
-            "score": score,
-            "risk_level": risk_level,
-            "signals": ", ".join(signals) if signals else "none",
-            "similar_cases": cases_text
-        })
+        result = await asyncio.wait_for(
+            chain.ainvoke({
+                "amount": safe_transaction.get("amount"),
+                "merchant": safe_transaction.get("merchant") or "Unknown",
+                "merchant_category": safe_transaction.get("merchant_category") or "Unknown",
+                "location": safe_transaction.get("location") or "Unknown",
+                "transaction_type": safe_transaction.get("transaction_type"),
+                "score": score,
+                "risk_level": risk_level,
+                "signals": ", ".join(signals) if signals else "none",
+                "similar_cases": cases_text
+            }),
+            timeout=LLM_TIMEOUT_SECONDS
+        )
 
-        # Guardrail 3: validate output before returning it
         is_valid, cleaned_result = validate_llm_output(result)
         return cleaned_result
 
+    except asyncio.TimeoutError:
+        logger.warning(f"[degraded mode] LLM call timed out after {LLM_TIMEOUT_SECONDS}s")
+        return FALLBACK_SUMMARY
     except Exception as e:
-        return f"Summary generation failed: {str(e)}"
+        logger.warning(f"[degraded mode] LLM call failed: {e}")
+        return FALLBACK_SUMMARY

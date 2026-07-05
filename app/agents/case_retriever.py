@@ -8,5 +8,5 @@ async def case_retriever_node(state: FraudAnalysisState) -> dict:
         + state.get("behavioral_signals", [])
         + state.get("pattern_signals", [])
     )
-    similar_cases = retrieve_similar_cases(state["transaction"], combined_signals)
+    similar_cases = await retrieve_similar_cases(state["transaction"], combined_signals)
     return {"similar_cases": similar_cases}
