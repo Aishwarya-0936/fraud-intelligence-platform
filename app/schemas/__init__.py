@@ -13,6 +13,7 @@ class TransactionCreate(BaseModel):
     device_id: Optional[str] = None
     destination_account: Optional[str] = None
     transaction_type: str
+    idempotency_key: Optional[str] = None
 
 class TransactionResponse(BaseModel):
     id: UUID4

@@ -23,6 +23,7 @@ class Transaction(Base):
     summary = Column(String, nullable=True)
     review_decision = Column(String, nullable=True)  # "approved" or "rejected"
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    idempotency_key = Column(String, nullable=True, unique=True, index=True)
 
 class UserLoginEvent(Base):
     __tablename__ = "user_login_events"

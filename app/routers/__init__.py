@@ -24,6 +24,16 @@ async def create_transaction(
     transaction: TransactionCreate,
     db: AsyncSession = Depends(get_db)
 ):
+    # Idempotency check — if this exact request was already processed, return the original result
+    # instead of scoring it again (protects against network retries, double-submits, etc.)
+    if transaction.idempotency_key:
+        existing = await db.execute(
+            select(Transaction).where(Transaction.idempotency_key == transaction.idempotency_key)
+        )
+        existing_transaction = existing.scalar_one_or_none()
+        if existing_transaction:
+            return existing_transaction
+
     db_transaction = Transaction(
         user_id=transaction.user_id,
         amount=transaction.amount,
@@ -33,6 +43,7 @@ async def create_transaction(
         device_id=transaction.device_id,
         destination_account=transaction.destination_account,
         transaction_type=transaction.transaction_type,
+        idempotency_key=transaction.idempotency_key,
     )
     db.add(db_transaction)
     await db.commit()
