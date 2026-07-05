@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from app.agents.state import FraudAnalysisState
 
 
@@ -23,16 +23,19 @@ def check_geographic_impossibility(profile: dict, current_location: str) -> bool
     if last_region and current_region and last_region != current_region:
         try:
             last_time = datetime.fromisoformat(profile["last_transaction_time"])
-            now = datetime.utcnow()
+            if last_time.tzinfo is None:
+                last_time = last_time.replace(tzinfo=timezone.utc)
+
+            now = datetime.now(timezone.utc)
             minutes_elapsed = (now - last_time).total_seconds() / 60
             if minutes_elapsed < 120:
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[geo_impossibility check failed]: {e}")
     return False
 
 
-async def behavioral_profiler_node(state: FraudAnalysisState) -> FraudAnalysisState:
+async def behavioral_profiler_node(state: FraudAnalysisState) -> dict:
     transaction = state["transaction"]
     profile = state["user_profile"]
 
@@ -40,7 +43,7 @@ async def behavioral_profiler_node(state: FraudAnalysisState) -> FraudAnalysisSt
     location = transaction.get("location")
     destination_account = transaction.get("destination_account")
     merchant_category = transaction.get("merchant_category")
-    hour = datetime.utcnow().hour
+    hour = datetime.now(timezone.utc).hour
 
     signals = []
     score = 0
@@ -73,6 +76,4 @@ async def behavioral_profiler_node(state: FraudAnalysisState) -> FraudAnalysisSt
         signals.append("credential_stuffing_risk")
         score += 40
 
-    state["behavioral_signals"] = signals
-    state["behavioral_score"] = score
     return {"behavioral_signals": signals, "behavioral_score": score}
