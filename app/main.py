@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.graphrag.pattern_graph import get_pattern_graph
 from app.routers import router, login_router
 from app.db import engine, Base
@@ -14,7 +15,6 @@ logging.basicConfig(
 
 load_dotenv()
 
-# LangSmith observability — traces every LangChain/LangGraph call automatically
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGSMITH_PROJECT", "fraud-intelligence-platform")
 os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGSMITH_API_KEY", "")
@@ -23,7 +23,7 @@ os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGSMITH_API_KEY", "")
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    get_pattern_graph()  # pre-builds and caches the graph in memory at startup
+    get_pattern_graph()
     yield
 
 app = FastAPI(
@@ -31,6 +31,14 @@ app = FastAPI(
     description="Real-time transaction monitoring and fraud risk analysis using Agentic AI, LangGraph, RAG, and multi-agent orchestration",
     version="2.0.0",
     lifespan=lifespan
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(router)

@@ -1,0 +1,85 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --bg-void: #0f1729;
+  --bg-panel: #1a2540;
+  --bg-panel-raised: #24304f;
+  --border-subtle: #34456e;
+  --border-active: #465a8a;
+
+  --accent-signal: #6ba892;
+  --accent-signal-dim: #6ba89233;
+  --accent-glow: #a08cc0;
+  -accent-glow-dim: #a08cc033;
+
+  --risk-critical: #ff4d6d;
+  --risk-critical-dim: #ff4d6d2a;
+  --risk-high: #ff9d52;
+  --risk-high-dim: #ff9d522a;
+  --risk-medium: #ffc542;
+  --risk-medium-dim: #ffc5422a;
+  --risk-low: #4ade80;
+  --risk-low-dim: #4ade802a;
+
+  --text-primary: #f1f5f9;
+  --text-dim: #94a3b8;
+  --text-faint: #5b6b8c;
+
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background: var(--bg-void);
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+body {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(59, 130, 246, 0.25) 0%, transparent 55%),
+    radial-gradient(circle at 80% 100%, rgba(45, 212, 191, 0.15) 0%, transparent 50%),
+    linear-gradient(180deg, #1e2a4a 0%, #141d33 40%, #0d1424 100%);
+  background-attachment: fixed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+[data-theme='light'] {
+  --bg-void: #f4f6fb;
+  --bg-panel: #ffffff;
+  --bg-panel-raised: #eef1f7;
+  --border-subtle: #dbe1ec;
+  --border-active: #c3ccdf;
+
+  --text-primary: #1a2233;
+  --text-dim: #64748b;
+  --text-faint: #94a3b8;
+}
+
+[data-theme='light'] body {
+  background:
+    radial-gradient(circle at 15% 10%, rgba(45, 132, 191, 0.06) 0%, transparent 45%),
+    radial-gradient(circle at 85% 90%, rgba(160, 140, 192, 0.05) 0%, transparent 50%),
+    #f4f6fb;
+}
+
+[data-theme='light'] body::before {
+  opacity: 0.015;
+}

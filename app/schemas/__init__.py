@@ -46,6 +46,10 @@ class LoginEventCreate(BaseModel):
     device_id: Optional[str] = None
     location: Optional[str] = None
     success: str
+    
+class ReviewRequest(BaseModel):
+    decision: str
+    reviewer_notes: Optional[str] = None
 
 class LoginEventResponse(BaseModel):
     id: UUID4

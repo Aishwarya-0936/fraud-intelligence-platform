@@ -114,12 +114,31 @@ async def get_transactions(
     return TransactionListResponse(total=total, skip=skip, limit=limit, items=items)
 
 
-@router.get("/{transaction_id}", response_model=TransactionResponse)
-async def get_transaction(transaction_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+@router.post("/{transaction_id}/review", response_model=TransactionResponse)
+async def review_transaction(
+    transaction_id: uuid.UUID,
+    review: TransactionReviewRequest,
+    db: AsyncSession = Depends(get_db)
+):
     result = await db.execute(select(Transaction).where(Transaction.id == transaction_id))
     transaction = result.scalar_one_or_none()
+
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
+
+    if review.decision not in ["approve", "reject", "escalate"]:
+        raise HTTPException(status_code=400, detail="Decision must be approve, reject, or escalate")
+
+    transaction.status = (
+        "approved" if review.decision == "approve"
+        else "rejected" if review.decision == "reject"
+        else "escalated"
+    )
+    if review.reviewer_notes:
+        transaction.reviewer_notes = review.reviewer_notes
+
+    await db.commit()
+    await db.refresh(transaction)
     return transaction
 
 
